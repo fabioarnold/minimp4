@@ -357,6 +357,9 @@ typedef struct MP4D_demux_tag
         unsigned char *comment;
         unsigned char *genre;
     } tag;
+
+    // Pointer used to store references to metadata tags
+    unsigned char **ptag;
 #endif
 
 } MP4D_demux_t;
@@ -2723,7 +2726,7 @@ int MP4D_open(MP4D_demux_t *mp4, int (*read_callback)(int64_t offset, void *buff
         boxsize_t box_bytes;
         uint32_t box_name;
 #if MP4D_INFO_SUPPORTED
-        unsigned char **ptag = NULL;
+        **ptag = NULL;
 #endif
         int read_bytes = 0;
 
@@ -3095,12 +3098,12 @@ broken_android_meta_hack:
             break;
 
             // Set pointer to tag to be read...
-        case BOX_calb: ptag = &mp4->tag.album;   break;
-        case BOX_cART: ptag = &mp4->tag.artist;  break;
-        case BOX_cnam: ptag = &mp4->tag.title;   break;
-        case BOX_cday: ptag = &mp4->tag.year;    break;
-        case BOX_ccmt: ptag = &mp4->tag.comment; break;
-        case BOX_cgen: ptag = &mp4->tag.genre;   break;
+        case BOX_calb: mp4->ptag = &mp4->tag.album;   break;
+        case BOX_cART: mp4->ptag = &mp4->tag.artist;  break;
+        case BOX_cnam: mp4->ptag = &mp4->tag.title;   break;
+        case BOX_cday: mp4->ptag = &mp4->tag.year;    break;
+        case BOX_ccmt: mp4->ptag = &mp4->tag.comment; break;
+        case BOX_cgen: mp4->ptag = &mp4->tag.genre;   break;
 
 #endif
 
@@ -3341,8 +3344,8 @@ broken_android_meta_hack:
         }
 
 #if MP4D_INFO_SUPPORTED
-        // Read tag is tag pointer is set
-        if (ptag && !*ptag && payload_bytes > 16)
+        // Read tag if tag pointer is set
+        if (mp4->ptag && !*(mp4->ptag) && payload_bytes > 16)
         {
 #if 0
             uint32_t size = READ(4);
@@ -3353,12 +3356,12 @@ broken_android_meta_hack:
 #else
             SKIP(4 + 4 + 4 + 4);
 #endif
-            MALLOC(unsigned char*, *ptag, (unsigned)payload_bytes + 1);
+            MALLOC(unsigned char*, *(mp4->ptag), (unsigned)payload_bytes + 1);
             for (i = 0; payload_bytes != 0; i++)
             {
-                (*ptag)[i] = READ(1);
+                (*(mp4->ptag))[i] = READ(1);
             }
-            (*ptag)[i] = 0; // zero-terminated string
+            (*(mp4->ptag))[i] = 0; // zero-terminated string
         }
 #endif
 
@@ -3559,6 +3562,7 @@ void MP4D_close(MP4D_demux_t *mp4)
         FREE(tr->sample_to_chunk);
         FREE(tr->chunk_offset);
         FREE(tr->dsi);
+        FREE(tr->syncsamples);
     }
     FREE(mp4->track);
 #if MP4D_INFO_SUPPORTED
@@ -3568,6 +3572,10 @@ void MP4D_close(MP4D_demux_t *mp4)
     FREE(mp4->tag.year);
     FREE(mp4->tag.comment);
     FREE(mp4->tag.genre);
+    if (mp4->ptag && *(mp4->ptag)) {
+      FREE(*(mp4->ptag));
+      mp4->ptag = NULL;
+    }
 #endif
 }
 
